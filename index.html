@@ -556,6 +556,34 @@ tbody tr:hover{background:rgba(0,212,255,0.02)}
           <p>Delete all records (irreversible)</p>
           <button class="btn btn-danger btn-sm" onclick="confirmClear()">🗑 Clear</button>
         </div>
+        <div class="mgmt-card">
+          <span class="icon">☁️</span>
+          <h3>Cloud Sync</h3>
+          <p id="githubStatus">Not configured</p>
+          <button class="btn btn-sm" onclick="toggleGithubConfig()">⚙ Configure</button>
+          <button class="btn btn-sm btn-success" onclick="syncFromGithub()" style="display:none" id="githubSyncBtn">🔄 Sync</button>
+        </div>
+      </div>
+      <div id="githubConfigPanel" style="display:none;margin-top:12px;padding:16px;border:1px solid var(--border);border-radius:8px;background:rgba(0,212,255,0.03)">
+        <div style="font-size:12px;color:var(--cyan);margin-bottom:8px;font-weight:600">☁️ GitHub Settings</div>
+        <div class="form-row">
+          <div class="form-group" style="flex:2">
+            <label>Token</label>
+            <input type="password" id="githubToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+          </div>
+          <div class="form-group">
+            <label>Repository</label>
+            <input type="text" id="githubRepo" value="tsuimanlung/backup_tracker">
+          </div>
+          <div class="form-group" style="flex:1">
+            <label>File Path</label>
+            <input type="text" id="githubPath" value="data/backup_records.json">
+          </div>
+        </div>
+        <div class="btn-group" style="justify-content:flex-start;margin-top:8px">
+          <button class="btn btn-sm btn-primary" onclick="saveGithubConfig()">💾 Save</button>
+          <button class="btn btn-sm" onclick="toggleGithubConfig()">Cancel</button>
+        </div>
       </div>
     </div>
   </div>
@@ -597,8 +625,164 @@ function loadData(){
   }catch(e){}
   appData.forEach(r=>{ if(!r.id) r.id = genId(); });
 }
-function saveData(){ localStorage.setItem(STORE_KEY, JSON.stringify(appData)); }
+function saveData(){
+  localStorage.setItem(STORE_KEY, JSON.stringify(appData));
+  syncToGithub();
+}
 function genId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+
+// ============================================================
+// GITHUB SYNC
+// ============================================================
+const GITHUB_CFG_KEY = 'backup_tracker_github';
+
+function getGithubConfig(){
+  try{ return JSON.parse(localStorage.getItem(GITHUB_CFG_KEY)) || {}; }catch(e){ return {}; }
+}
+
+function toggleGithubConfig(){
+  const panel = document.getElementById('githubConfigPanel');
+  const cfg = getGithubConfig();
+  if(panel.style.display !== 'block'){
+    panel.style.display = 'block';
+    document.getElementById('githubToken').value = cfg.token || '';
+    document.getElementById('githubRepo').value = cfg.repo || 'tsuimanlung/backup_tracker';
+    document.getElementById('githubPath').value = cfg.path || 'data/backup_records.json';
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+function saveGithubConfig(){
+  const cfg = {
+    token: document.getElementById('githubToken').value.trim(),
+    repo: document.getElementById('githubRepo').value.trim(),
+    path: document.getElementById('githubPath').value.trim(),
+  };
+  localStorage.setItem(GITHUB_CFG_KEY, JSON.stringify(cfg));
+  toggleGithubConfig();
+  updateGithubStatus();
+  // push local data to GitHub so the file is created/updated immediately
+  if(cfg.token && cfg.repo && appData.length > 0){
+    pushToGithub(appData).then(() => {
+      toast('Config saved and data synced to GitHub','success');
+    }).catch(e => {
+      toast('Config saved, but sync failed: ' + e.message,'error');
+    });
+  } else {
+    toast('GitHub config saved','success');
+  }
+}
+
+function updateGithubStatus(){
+  const cfg = getGithubConfig();
+  const el = document.getElementById('githubStatus');
+  const syncBtn = document.getElementById('githubSyncBtn');
+  if(cfg.token && cfg.repo){
+    el.textContent = '✓ Connected' + (cfg.lastSync ? ' · last sync: ' + cfg.lastSync : '');
+    syncBtn.style.display = 'inline-block';
+  } else {
+    el.textContent = 'Not configured';
+    syncBtn.style.display = 'none';
+  }
+}
+
+async function githubApi(method, url, token, body){
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'Authorization': 'token ' + token,
+      'Content-Type': 'application/json',
+      'Accept': 'application/vnd.github.v3+json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if(!res.ok){
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err.message || 'HTTP ' + res.status);
+  }
+  return res.json();
+}
+
+function base64Encode(str){
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  for(let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function base64Decode(base64){
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for(let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+async function pullFromGithub(){
+  const cfg = getGithubConfig();
+  if(!cfg.token || !cfg.repo) return null;
+  const [owner, repo] = cfg.repo.split('/');
+  try {
+    const res = await githubApi('GET', `https://api.github.com/repos/${owner}/${repo}/contents/${cfg.path}`, cfg.token);
+    const content = base64Decode(res.content);
+    const data = JSON.parse(content);
+    cfg.sha = res.sha;
+    cfg.lastSync = new Date().toLocaleString();
+    localStorage.setItem(GITHUB_CFG_KEY, JSON.stringify(cfg));
+    updateGithubStatus();
+    return { data, sha: res.sha };
+  } catch(e) {
+    if(e.message.includes('Not Found') || e.message.includes('404')) return null;
+    throw e;
+  }
+}
+
+async function pushToGithub(content){
+  const cfg = getGithubConfig();
+  if(!cfg.token || !cfg.repo) return;
+  const [owner, repo] = cfg.repo.split('/');
+  const base64 = base64Encode(JSON.stringify(content, null, 2));
+  let sha = cfg.sha;
+  if(!sha){
+    try {
+      const existing = await githubApi('GET', `https://api.github.com/repos/${owner}/${repo}/contents/${cfg.path}`, cfg.token);
+      sha = existing.sha;
+    } catch(e) { /* doesn't exist yet — will be created */ }
+  }
+  const body = { message: 'Update backup records', content: base64 };
+  if(sha) body.sha = sha;
+  const res = await githubApi('PUT', `https://api.github.com/repos/${owner}/${repo}/contents/${cfg.path}`, cfg.token, body);
+  cfg.sha = res.content.sha;
+  cfg.lastSync = new Date().toLocaleString();
+  localStorage.setItem(GITHUB_CFG_KEY, JSON.stringify(cfg));
+  updateGithubStatus();
+}
+
+async function syncFromGithub(){
+  try {
+    const result = await pullFromGithub();
+    if(result && result.data && Array.isArray(result.data)){
+      appData = result.data;
+      saveData();
+      renderHistory();
+      updateTodayOverview();
+      populateSystemFilter();
+      updateMgmtSummary();
+      try{ renderStats(); }catch(e){}
+      toast('Synced ' + result.data.length + ' records from GitHub','success');
+    } else {
+      toast('No data file found on GitHub. Save a record first to create it.','info');
+    }
+  } catch(e) {
+    toast('Sync failed: ' + e.message,'error');
+  }
+}
+
+function syncToGithub(){
+  const cfg = getGithubConfig();
+  if(!cfg.token || !cfg.repo) return;
+  pushToGithub(appData).catch(e => console.error('GitHub sync error:', e));
+}
 
 function getTodayStr(){ return new Date().toISOString().slice(0,10); }
 
@@ -1325,8 +1509,26 @@ clearForm();
 updateTodayOverview();
 populateSystemFilter();
 updateMgmtSummary();
+updateGithubStatus();
 setTimeout(()=>{ try{ renderStats(); }catch(e){} }, 100);
-toast('System ready','info');
+// auto pull from GitHub if configured (only if local data is empty)
+setTimeout(() => {
+  const cfg = getGithubConfig();
+  if(cfg.token && cfg.repo && appData.length === 0){
+    pullFromGithub().then(result => {
+      if(result && result.data && Array.isArray(result.data) && result.data.length > 0){
+        appData = result.data;
+        localStorage.setItem(STORE_KEY, JSON.stringify(appData));
+        renderHistory();
+        updateTodayOverview();
+        populateSystemFilter();
+        updateMgmtSummary();
+        try{ renderStats(); }catch(e){}
+        toast('Loaded ' + result.data.length + ' records from GitHub','info');
+      }
+    }).catch(() => {});
+  }
+}, 600);
 </script>
 
 <!-- ===== Particle Background ===== -->
