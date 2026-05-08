@@ -2,6 +2,8 @@
 
 A web-based daily backup recording and statistics tool. Built with vanilla HTML/CSS/JS — no build step, no framework, no backend. Data is stored entirely in your browser via localStorage.
 
+[**简体中文**](README.zh-CN.md)
+
 ## Features
 
 - **Daily Entry** — Log backup jobs with system, type, status, data size, duration, operator, source path, media, volume label/SN, and notes
