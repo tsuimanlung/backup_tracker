@@ -12,6 +12,7 @@ A web-based daily backup recording and statistics tool. Built with vanilla HTML/
 - **History Filtering** — Filter records by date range, system, and status
 - **Excel Import** — Import records from `.xls` / `.xlsx` files with automatic header detection
 - **Excel Template Download** — Generate a blank template for offline data collection
+- **Cloud Sync** — Sync data across browsers via GitHub API. Configure a Personal Access Token in Management → Cloud Sync, and data auto-pushes to the repository on every save.
 - **Dark Sci-Fi UI** — Particle animation background, glow effects, scanline overlay
 
 ## Usage
@@ -20,8 +21,9 @@ A web-based daily backup recording and statistics tool. Built with vanilla HTML/
 2. Fill in the backup details and click **Save**
 3. Switch to **History** tab to view, filter, lock, or delete records
 4. Switch to **Statistics** tab for visual analysis
+5. Go to **Management** → **Cloud Sync** to configure GitHub sync for cross-browser data sharing
 
-All data is persisted in your browser's localStorage. No data is sent to any server.
+All data is persisted in your browser's localStorage and optionally synced to your GitHub repository.
 
 ## Data Fields
 

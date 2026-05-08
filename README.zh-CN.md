@@ -10,6 +10,7 @@
 - **历史筛选** — 按日期范围、系统和状态筛选记录
 - **Excel 导入** — 支持 `.xls` / `.xlsx` 文件导入，自动识别表头
 - **Excel 模板下载** — 生成空白模板供离线收集数据
+- **云同步** — 通过 GitHub API 跨浏览器共享数据。在 Management → Cloud Sync 配置 Personal Access Token 后，每次保存自动推送数据到仓库。
 - **深色科幻 UI** — 粒子动画背景、发光效果、扫描线叠加
 
 ## 使用方法
@@ -18,8 +19,9 @@
 2. 填写备份信息，点击 **Save** 保存
 3. 切换到 **History** 标签页查看、筛选、锁定或删除记录
 4. 切换到 **Statistics** 标签页查看可视化分析
+5. 在 **Management** → **Cloud Sync** 配置 GitHub 同步，实现跨浏览器数据共享
 
-所有数据保存在浏览器 localStorage 中，不会发送到任何服务器。
+所有数据保存在浏览器 localStorage 中，并可选同步到你的 GitHub 仓库。
 
 ## 数据字段
 
