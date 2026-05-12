@@ -2189,7 +2189,7 @@
     "volSN": "70C4-4CBE",
     "note": "",
     "id": "mp1zyil90vhq4j",
-    "locked": false,
+    "locked": true,
     "createdAt": "2026-05-12T02:13:51.645Z"
   },
   {
@@ -2206,7 +2206,7 @@
     "volSN": "56C3-C608",
     "note": "",
     "id": "mp1zzqb9ujcr3o",
-    "locked": false,
+    "locked": true,
     "createdAt": "2026-05-12T02:14:48.309Z"
   }
 ]
